@@ -1,0 +1,1923 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>員工動態統計表</title> 
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        }
+        .hidden { display: none; }
+        .stat-card {
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+            border-color: rgba(234, 179, 8, 0.2); 
+            box-shadow: 0 0 15px rgba(234, 179, 8, 0.1);
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 0 25px rgba(234, 179, 8, 0.2);
+            border-color: rgba(234, 179, 8, 0.4);
+        }
+        .table-input {
+            width: 100%;
+            padding: 0.5rem;
+            background-color: #334155;
+            color: #f1f5f9;
+            border: 1px solid #475569;
+            border-radius: 0.375rem;
+            box-shadow: inset 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+         .table-input:disabled {
+            background-color: #475569;
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .table-checkbox {
+            height: 1.25rem;
+            width: 1.25rem;
+            rounded: 0.375rem;
+            color: #60a5fa; 
+            background-color: #334155;
+            border-color: #475569;
+            focus:ring-offset-0;
+            focus:ring-2;
+            focus:ring-blue-500; 
+            margin-left: auto;
+            margin-right: auto;
+            display: block;
+        }
+         .table-checkbox:disabled {
+             opacity: 0.5;
+             cursor: not-allowed;
+         }
+         /* Loading Spinner */
+        .loader {
+            border: 4px solid #3b82f6; 
+            border-left-color: transparent;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+         .placeholder-row td {
+             color: #64748b; /* slate-500 */
+             font-style: italic;
+             height: 53px; 
+         }
+         
+         .mobile-card-grid {
+             display: grid;
+             grid-template-columns: auto 1fr;
+             gap: 0.25rem 1rem;
+         }
+         .mobile-card-grid > dt {
+             font-weight: 600;
+             color: #94a3b8; /* slate-400 */
+         }
+         .mobile-card-grid > dd {
+             color: #f1f5f9; /* slate-100 */
+         }
+
+        @media print {
+            body {
+                background: white !important;
+                color: black !important;
+                -webkit-print-color-adjust: exact;
+                color-adjust: exact;
+            }
+
+            .no-print, #dashboard-content {
+                display: none !important;
+            }
+            
+            #print-view {
+                display: block !important;
+                 padding: 1cm !important;
+                 margin: 0 !important;
+                 max-width: 100% !important;
+            }
+
+            #print-stats {
+                display: grid !important; 
+            }
+            
+            /* *** 列印時隱藏主管表 *** */
+            #print-manager-stats {
+                display: none;
+            }
+
+            #print-view h1, #print-view p, #print-view th, #print-view td, #print-stats h3, #print-stats p {
+                color: black !important;
+            }
+            
+            #print-summary table, #print-resignation-stats table, #print-turnover-stats table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 10pt;
+                page-break-inside: auto;
+            }
+             #print-summary tr, #print-resignation-stats tr, #print-turnover-stats tr {
+                page-break-inside: avoid;
+                page-break-after: auto;
+             }
+
+            #print-summary th, #print-summary td, 
+            #print-resignation-stats th, #print-resignation-stats td,
+            #print-turnover-stats th, #print-turnover-stats td {
+                border: 1px solid #999;
+                padding: 6px;
+                text-align: center; 
+            }
+            
+            #print-summary th, #print-resignation-stats th, #print-turnover-stats th {
+                text-align: center; 
+            }
+            
+            #print-resignation-stats td, #print-turnover-stats td {
+                 text-align: left;
+            }
+            #print-turnover-stats .text-center {
+                text-align: center;
+            }
+
+
+            #print-summary thead, #print-resignation-stats thead, #print-turnover-stats thead {
+                background-color: #f2f2f2 !important;
+                -webkit-print-color-adjust: exact;
+                color-adjust: exact;
+                display: table-header-group;
+            }
+            #print-summary th {
+                font-weight: bold;
+            }
+            .placeholder-row { display: none; } 
+            
+            /* *** 新增分頁列印樣式 *** */
+            #print-resignation-stats, #print-turnover-stats {
+                 page-break-before: always;
+                 margin-top: 2cm;
+            }
+            #print-resignation-stats h2, #print-turnover-stats h2 {
+                text-align: center;
+                font-size: 1.5rem;
+                font-weight: bold;
+                margin-bottom: 1rem;
+            }
+        }
+    </style>
+</head>
+<body class="text-gray-300">
+    
+    <div id="print-view" class="hidden bg-white text-gray-800 min-h-screen p-8">
+        <div id="print-header" class="text-center mb-8 border-b-2 border-gray-300 pb-4">
+            <h1 class="text-2xl font-bold">員工資料統計總表</h1>
+            <p class="text-sm text-gray-600 mt-1">發布日期: <span id="print-date-span"></span></p>
+        </div>
+        
+        <!-- 關鍵指標摘要 -->
+        <div id="print-stats" class="grid grid-cols-4 gap-4 mb-8 text-center">
+            <div class="p-4 bg-gray-50 rounded border border-gray-300">
+                 <h3 class="text-sm font-medium text-gray-600">總員工人數</h3>
+                <p id="print-total-employees" class="text-2xl font-bold text-gray-900 mt-1">0</p>
+            </div>
+            <div class="p-4 bg-gray-50 rounded border border-gray-300">
+                <h3 class="text-sm font-medium text-gray-600">考試完成數</h3>
+                <p id="print-exams-completed" class="text-2xl font-bold text-gray-900 mt-1">0</p>
+            </div>
+            <div class="p-4 bg-gray-50 rounded border border-gray-300">
+                <h3 class="text-sm font-medium text-gray-600">平均分數</h3>
+                <p id="print-average-score" class="text-2xl font-bold text-gray-900 mt-1">N/A</p>
+            </div>
+            <div class="p-4 bg-gray-50 rounded border border-gray-300">
+                <h3 class="text-sm font-medium text-gray-600">考試通過率 (>=60分)</h3>
+                <p id="print-pass-rate" class="text-2xl font-bold text-gray-900 mt-1">N/A</p>
+            </div>
+        </div>
+        
+         <!-- *** 新增：主管表 (列印用) *** -->
+        <div id="print-manager-stats" class="mt-8">
+             <h2 class="text-xl font-bold text-gray-800 text-center mb-4">主管動態表</h2>
+             <table class="w-full">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="p-2 border border-gray-400">姓名</th>
+                        <th class="p-2 border border-gray-400">職稱</th>
+                        <th class="p-2 border border-gray-400">到職日期</th>
+                        <th class="p-2 border border-gray-400">轉調日期</th>
+                    </tr>
+                </thead>
+                <tbody id="print-manager-tbody">
+                    <!-- JS will populate this section -->
+                </tbody>
+            </table>
+        </div>
+
+        <div id="print-summary" class="mt-8">
+            <h2 class="text-xl font-bold text-gray-800 text-center mb-4">各分店員工資料明細</h2>
+            <table class="w-full">
+                <thead>
+                    <tr>
+                        <th class="p-2 border border-gray-400 bg-gray-100">分店別</th>
+                        <th class="p-2 border border-gray-400 bg-gray-100">姓名</th>
+                        <th class="p-2 border border-gray-400 bg-gray-100">職稱</th>
+                        <th class="p-2 border border-gray-400 bg-gray-100">到職日期</th>
+                        <th class="p-2 border border-gray-400 bg-gray-100">筆試日期</th>
+                        <th class="p-2 border border-gray-400 bg-gray-100">筆試成績</th>
+                        <th class="p-2 border border-gray-400 bg-gray-100">職能認證頒發</th>
+                    </tr>
+                </thead>
+                <tbody id="print-summary-tbody">
+                    <!-- JS will populate this section -->
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- *** 新增：離職統計 (列印用) *** -->
+        <div id="print-resignation-stats" class="mt-12">
+             <h2 class="text-xl font-bold text-gray-800 text-center mb-4">離職人員統計 (依離職日期)</h2>
+             <table class="w-full">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="p-2 border border-gray-400">年度</th>
+                        <th class="p-2 border border-gray-400">月份</th>
+                        <th class="p-2 border border-gray-400">中正店</th>
+                        <th class="p-2 border border-gray-400">巨蛋店</th>
+                        <th class="p-2 border border-gray-400">中港店</th>
+                        <th class="p-2 border border-gray-400">復興店</th>
+                        <th class="p-2 border border-gray-400">南京店</th>
+                        <th class="p-2 border border-gray-400">主管</th> <!-- *** 新增主管欄 *** -->
+                        <th class="p-2 border border-gray-400">當月總計</th>
+                    </tr>
+                </thead>
+                <tbody id="print-resignation-tbody">
+                    <!-- JS will populate this section -->
+                </tbody>
+            </table>
+             <div id="print-resignation-empty-state" class="hidden text-center py-10">
+                <p class="mt-1 text-sm text-gray-600">目前沒有離職人員紀錄。</p>
+            </div>
+        </div>
+        
+        <!-- *** 新增：動態率 (列印用) *** -->
+        <div id="print-turnover-stats" class="mt-12">
+             <h2 class="text-xl font-bold text-gray-800 text-center mb-4">月度人事動態率 (僅分店員工)</h2>
+             <table class="w-full">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="p-2 border border-gray-400">月份</th>
+                        <th class="p-2 border border-gray-400 text-center">期初人數</th>
+                        <th class="p-2 border border-gray-400 text-center">新進人數</th>
+                        <th class="p-2 border border-gray-400 text-center">離職人數</th>
+                        <th class="p-2 border border-gray-400 text-center">期末人數</th>
+                        <th class="p-2 border border-gray-400 text-center">平均人數</th>
+                        <th class="p-2 border border-gray-400 text-center">到職率</th>
+                        <th class="p-2 border border-gray-400 text-center">離職率</th>
+                    </tr>
+                </thead>
+                <tbody id="print-turnover-tbody">
+                    <!-- JS will populate this section -->
+                </tbody>
+            </table>
+             <div id="print-turnover-empty-state" class="hidden text-center py-10">
+                <p class="mt-1 text-sm text-gray-600">尚無足夠資料可計算動態率。</p>
+            </div>
+        </div>
+
+
+        <div class="text-center mt-8 no-print p-4 bg-gray-100 rounded-lg">
+            <p class="text-gray-700 mb-4 font-semibold">您現在可以透過瀏覽器的列印功能 (快捷鍵: Ctrl+P 或 Cmd+P) 將此多頁報告另存為 PDF。</p>
+            <button id="return-to-dashboard-btn" class="bg-cyan-600 text-white font-semibold py-2 px-6 rounded-lg hover:bg-cyan-700 transition-colors">返回儀表板</button>
+        </div>
+    </div>
+
+    <div id="loading-overlay" class="fixed inset-0 bg-slate-900 bg-opacity-80 flex items-center justify-center z-50">
+        <div class="flex items-center space-x-3 bg-slate-700 p-4 rounded-lg shadow-lg">
+             <div class="loader"></div>
+             <span class="text-gray-200 font-medium">載入資料中...</span>
+        </div>
+    </div>
+
+
+    <div id="dashboard-content" class="opacity-0 transition-opacity duration-500"> 
+        <div class="container mx-auto p-4 sm:p-6 lg:p-8">
+            <!-- 頁首 -->
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+                <div class="mb-4 sm:mb-0">
+                    <h1 class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-300">
+                        員工動態統計表
+                    </h1>
+                    <p class="text-base text-gray-400 mt-1">即時數據總覽與員工管理 (資料已連線雲端)</p>
+                </div>
+                <div class="flex w-full sm:w-auto space-x-3 no-print">
+                     <!-- *** 修改按鈕樣式 *** -->
+                    <button id="add-employee-btn" disabled class="w-1/3 sm:w-auto bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-300 text-slate-900 font-semibold py-2 px-5 rounded-lg shadow-lg shadow-yellow-500/20 hover:from-yellow-400 hover:via-amber-500 hover:to-yellow-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-opacity-75 transition duration-300 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>
+                        新增
+                    </button>
+                    <button id="export-btn" disabled class="w-1/3 sm:w-auto bg-emerald-600 text-white font-semibold py-2 px-5 rounded-lg shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-opacity-75 transition duration-300 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                        匯出
+                    </button>
+                    <button id="print-btn" disabled class="w-1/3 sm:w-auto bg-slate-600 text-white font-semibold py-2 px-5 rounded-lg shadow-lg shadow-slate-600/20 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-opacity-75 transition duration-300 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 4v3H4a2 2 0 00-2 2v3a2 2 0 002 2h1v3a2 2 0 002 2h6a2 2 0 002-2v-3h1a2 2 0 002-2V9a2 2 0 00-2-2h-1V4a2 2 0 00-2-2H7a2 2 0 00-2 2zm8 0H7v3h6V4zm0 8H7v4h6v-4z" clip-rule="evenodd" /></svg>
+                        預覽
+                    </button>
+                </div>
+            </div>
+            
+             <!-- *** 1. 各分店員工資料明細 *** -->
+            <div class="bg-slate-800/60 backdrop-blur-sm rounded-xl shadow-lg p-4 sm:p-8 border border-slate-700 mb-8">
+                 <h3 class="text-lg font-semibold text-gray-100 mb-4">各分店員工資料明細</h3>
+                 <div id="employee-tables-container" class="space-y-8">
+                    <!-- JS 會動態生成各分店表格 -->
+                 </div>
+                 <div id="empty-state" class="hidden text-center py-10">
+                    <svg class="mx-auto h-12 w-12 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                    <h3 class="mt-2 text-sm font-medium text-gray-200">沒有員工資料</h3>
+                    <p class="mt-1 text-sm text-gray-400">請點擊「新增員工記錄」按鈕來建立第一筆資料。</p>
+                </div>
+            </div>
+
+             <!-- *** 2. 主管動態表 *** -->
+            <div id="manager-table-container" class="bg-slate-800/60 backdrop-blur-sm rounded-xl shadow-lg p-4 sm:p-8 border border-slate-700 mb-8">
+                 <h3 class="text-lg font-semibold text-gray-100 mb-4">主管動態表</h3>
+                 <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-slate-700">
+                        <thead class="bg-slate-900/70">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">姓名</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">職稱</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">到職日期</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">轉調日期</th>
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider no-print">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="manager-stats-tbody" class="bg-slate-800/50 divide-y divide-slate-700">
+                            <!-- JS 會動態生成主管表格 -->
+                        </tbody>
+                    </table>
+                 </div>
+                 <div id="manager-empty-state" class="hidden text-center py-10">
+                    <p class="mt-1 text-sm text-gray-400">目前沒有主管資料。</p>
+                </div>
+            </div>
+
+            <!-- *** 3. 關鍵指標 (員工總人數) *** -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
+                <!-- *** 更新文字 *** -->
+                <div class="stat-card bg-slate-800/60 backdrop-blur-sm p-4 sm:p-6 rounded-xl border"><h3 class="text-sm font-medium text-gray-400">分店總員工人數</h3><p id="total-employees" class="text-2xl sm:text-3xl font-bold text-gray-100 mt-2">0</p></div>
+                <div class="stat-card bg-slate-800/60 backdrop-blur-sm p-4 sm:p-6 rounded-xl border"><h3 class="text-sm font-medium text-gray-400">考試完成數</h3><p id="exams-completed" class="text-2xl sm:text-3xl font-bold text-gray-100 mt-2">0</p></div>
+                <div class="stat-card bg-slate-800/60 backdrop-blur-sm p-4 sm:p-6 rounded-xl border"><h3 class="text-sm font-medium text-gray-400">平均分數</h3><p id="average-score" class="text-2xl sm:text-3xl font-bold text-gray-100 mt-2">N/A</p></div>
+                <div class="stat-card bg-slate-800/60 backdrop-blur-sm p-4 sm:p-6 rounded-xl border"><h3 class="text-sm font-medium text-gray-400">考試通過率 (>=60分)</h3><p id="pass-rate" class="text-2xl sm:text-3xl font-bold text-gray-100 mt-2">N/A</p></div>
+            </div>
+            
+            <!-- *** 4. 月度人事動態率 *** -->
+            <div class="bg-slate-800/60 backdrop-blur-sm rounded-xl shadow-lg p-4 sm:p-8 border border-slate-700 mb-8 no-print">
+                 <h3 class="text-lg font-semibold text-gray-100 mb-4">月度人事動態率 (僅分店員工)</h3>
+                 <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-slate-700">
+                        <thead class="bg-slate-900/70">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">月份</th>
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">期初人數</th>
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">新進人數</th>
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">離職人數</th>
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">期末人數</th>
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">平均人數</th>
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">到職率</th>
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">離職率</th>
+                            </tr>
+                        </thead>
+                        <tbody id="turnover-stats-tbody" class="bg-slate-800/50 divide-y divide-slate-700">
+                            <!-- JS generates stats here -->
+                        </tbody>
+                    </table>
+                 </div>
+                 <div id="turnover-empty-state" class="hidden text-center py-10">
+                    <p class="mt-1 text-sm text-gray-400">尚無足夠資料可計算動態率。</p>
+                </div>
+            </div>
+            
+            <!-- *** 5. 離職人員統計 *** -->
+            <div class="bg-slate-800/60 backdrop-blur-sm rounded-xl shadow-lg p-4 sm:p-8 border border-slate-700 mb-8">
+                 <div class="flex justify-between items-center mb-4">
+                     <!-- *** 修改標題樣式 *** -->
+                     <h3 class="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-300">離職人員統計 (依離職日期)</h3>
+                     <button id="clear-resigned-btn" disabled class="bg-red-600 text-white text-xs font-semibold py-1 px-3 rounded-md shadow-md shadow-red-500/20 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-75 transition disabled:opacity-50 disabled:cursor-not-allowed no-print">
+                         清除所有離職紀錄
+                     </button>
+                 </div>
+                 <div id="resignation-stats-container" class="overflow-x-auto hidden md:block">
+                    <table class="min-w-full divide-y divide-slate-700">
+                        <thead class="bg-slate-900/70">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">年度</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">月份</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">中正店</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">巨蛋店</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">中港店</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">復興店</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">南京店</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">主管</th> <!-- *** 新增主管欄 *** -->
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">當月總計</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resignation-stats-tbody" class="bg-slate-800/50 divide-y divide-slate-700">
+                            <!-- JS 會動態生成離職統計 -->
+                        </tbody>
+                    </table>
+                 </div>
+                 <div id="resignation-stats-cards" class="block md:hidden space-y-3">
+                     <!-- JS 會動態生成離職統計卡片 -->
+                 </div>
+                 <div id="resignation-empty-state" class="hidden text-center py-10">
+                    <p class="mt-1 text-sm text-gray-400">目前沒有離職人員紀錄。</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- 新增/編輯 員工 Modal -->
+    <div id="employee-modal" class="fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm overflow-y-auto h-full w-full hidden z-50 no-print">
+        <div class="relative top-10 sm:top-20 mx-auto p-5 border border-slate-700 w-full max-w-lg shadow-lg shadow-cyan-500/20 rounded-xl bg-slate-800">
+            <div class="flex justify-between items-center pb-3">
+                <h3 id="employee-modal-title" class="text-2xl font-bold text-cyan-400">新增員工資料</h3> <!-- 新增 ID -->
+                <button id="close-modal-btn" class="text-gray-400 hover:text-gray-200 transition"><svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+            </div>
+            <form id="employee-form" class="space-y-4">
+                <div id="branch-group"> <!-- *** 新增 ID *** -->
+                    <label for="branch" class="block text-sm font-medium text-gray-300">分店別</label>
+                    <select id="branch" name="branch" required class="mt-1 block w-full pl-3 pr-10 py-2 text-base bg-slate-700 border-slate-600 text-gray-200 focus:outline-none focus:ring-cyan-500 focus:border-cyan-500 sm:text-sm rounded-md">
+                        <option value="">請選擇分店</option>
+                        <option>中正店</option>
+                        <option>巨蛋店</option>
+                        <option>中港店</option>
+                        <option>復興店</option>
+                        <option>南京店</option>
+                    </select>
+                </div>
+                <div><label for="name" class="block text-sm font-medium text-gray-300">姓名</label><input type="text" id="name" name="name" required class="mt-1 block w-full bg-slate-700 border-slate-600 text-gray-200 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-cyan-500 focus:border-cyan-500"></div>
+                <div>
+                    <label for="title" class="block text-sm font-medium text-gray-300">職稱</label>
+                     <!-- *** 更新下拉選單 *** -->
+                    <select id="title" name="title" required class="mt-1 block w-full pl-3 pr-10 py-2 text-base bg-slate-700 border-slate-600 text-gray-200 focus:outline-none focus:ring-cyan-500 focus:border-cyan-500 sm:text-sm rounded-md">
+                        <option value="">請選擇職稱</option>
+                        <optgroup label="分店職位">
+                            <option value="諮詢顧問">諮詢顧問</option>
+                            <option value="諮詢師">諮詢師</option>
+                            <option value="醫美師">醫美師</option>
+                            <option value="護理師">護理師</option>
+                        </optgroup>
+                        <optgroup label="主管職位">
+                            <option value="經理">經理</option>
+                            <option value="副理">副理</option>
+                            <option value="護理長">護理長</option>
+                        </optgroup>
+                    </select>
+                </div>
+                <div><label for="hireDate" class="block text-sm font-medium text-gray-300">到職日期</Mabel><input type="date" id="hireDate" name="hireDate" required class="mt-1 block w-full bg-slate-700 border-slate-600 text-gray-200 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-cyan-500 focus:border-cyan-500"></div>
+                
+                <!-- *** 新增轉調日期 *** -->
+                <div id="transfer-date-group" class="hidden">
+                    <label for="transferDate" class="block text-sm font-medium text-gray-300">轉調日期</label>
+                    <input type="date" id="transferDate" name="transferDate" class="mt-1 block w-full table-input">
+                </div>
+
+                <!-- *** 新增考試群組 *** -->
+                <div id="exam-fields-group">
+                    <div><label for="examDate" class="block text-sm font-medium text-gray-300">筆試日期</Mabel><input type="date" id="examDate" name="examDate" class="mt-1 block w-full bg-slate-700 border-slate-600 text-gray-200 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-cyan-500 focus:border-cyan-500"></div>
+                    <div><label for="score" class="block text-sm font-medium text-gray-300">筆試成績</Mabel><input type="number" id="score" name="score" placeholder="尚未考試可留白" min="0" max="100" class="mt-1 block w-full bg-slate-700 border-slate-600 text-gray-200 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-cyan-500 focus:border-cyan-500"></div>
+                    <div>
+                        <label class="flex items-center space-x-2 text-sm font-medium text-gray-300">
+                            <input type="checkbox" id="certified" name="certified" class="h-4 w-4 rounded text-blue-400 bg-slate-700 border-slate-600 focus:ring-blue-500">
+                            <span>職能認證頒發</span>
+                        </label>
+                    </div>
+                </div>
+
+                 <!-- *** 更新按鈕區域 *** -->
+                <div class="pt-4 flex justify-end items-center"> <!-- *** 移除 justify-between *** -->
+                     <!-- 移除 modal-delete-btn -->
+                     <!-- 右側按鈕組 -->
+                    <div class="flex space-x-3"> <!-- *** 移除 ml-auto *** -->
+                        <button type="button" id="cancel-btn" class="bg-slate-600 text-gray-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-500 transition">取消</button>
+                        <button type="submit" class="bg-cyan-500 text-white font-semibold py-2 px-6 rounded-lg shadow-md shadow-cyan-500/20 hover:bg-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-opacity-75 transition">儲存</Mutton>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-confirm-modal" class="fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm overflow-y-auto h-full w-full hidden z-50 no-print">
+        <div class="relative top-40 mx-auto p-5 border border-slate-700 w-full max-w-md shadow-lg shadow-red-500/20 rounded-xl bg-slate-800">
+            <div class="mt-3 text-center">
+                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-yellow-900"> <!-- *** 改為黃色警告 *** -->
+                     <svg class="h-6 w-6 text-yellow-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                       <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.008v.008H12v-.008Z" />
+                     </svg>
+                </div>
+                <h3 class="text-lg leading-6 font-medium text-gray-100 mt-4">請選擇員工異動狀態</h3>
+                <div class="mt-2 px-7 py-3 text-left">
+                    <p class="text-sm text-gray-400 mb-2">
+                        <strong class="text-yellow-400">內部調轉 (晉升/降級):</strong><br>
+                        員工將從此職位移除 (變為空位)，以便您將他新增至新職位。**不會**列入離職統計。
+                    </p>
+                    <p class="text-sm text-gray-400 mt-3">
+                         <strong class="text-red-400">確認離職 (離開公司):</strong><br>
+                         員工將被歸檔並**永久列入**離職統計與動態率。
+                    </p>
+                </div>
+                <div class="items-center px-4 py-3 flex justify-between">
+                    <button id="cancel-delete-btn" class="px-4 py-2 bg-slate-600 text-white text-base font-medium rounded-md w-24 shadow-sm hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-500">
+                        取消
+                    </button>
+                    <div class="space-x-3">
+                        <button id="confirm-transfer-btn" class="px-4 py-2 bg-yellow-600 text-white text-base font-medium rounded-md shadow-sm hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500">
+                            內部調轉
+                        </button>
+                        <button id="confirm-resign-btn" class="px-4 py-2 bg-red-600 text-white text-base font-medium rounded-md w-24 shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500">
+                            確認離職
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Clear Resigned Confirmation Modal -->
+    <div id="clear-resigned-confirm-modal" class="fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm overflow-y-auto h-full w-full hidden z-50 no-print">
+        <div class="relative top-40 mx-auto p-5 border border-slate-700 w-full max-w-md shadow-lg shadow-yellow-500/20 rounded-xl bg-slate-800">
+            <div class="mt-3 text-center">
+                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-yellow-900">
+                     <svg class="h-6 w-6 text-yellow-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                       <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.008v.008H12v-.008Z" />
+                     </svg>
+                </div>
+                <h3 class="text-lg leading-6 font-medium text-gray-100 mt-4">確定要清除所有離職紀錄嗎？</h3>
+                <div class="mt-2 px-7 py-3">
+                    <p class="text-sm text-gray-400">
+                        所有已記錄的離職人員資料將被永久刪除，離職統計表將歸零。此操作無法復原。
+                    </p>
+                </div>
+                <div class="items-center px-4 py-3 space-x-4">
+                    <button id="cancel-clear-resigned-btn" class="px-4 py-2 bg-slate-600 text-white text-base font-medium rounded-md w-24 shadow-sm hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-500">
+                        取消
+                    </button>
+                    <button id="confirm-clear-resigned-btn" class="px-4 py-2 bg-yellow-600 text-white text-base font-medium rounded-md w-24 shadow-sm hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500">
+                        全部清除
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Firebase SDK -->
+    <script type="module">
+        // 匯入 Firebase 模組
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            signInAnonymously, 
+            onAuthStateChanged,
+            signInWithCustomToken
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            doc, 
+            addDoc, 
+            updateDoc, 
+            deleteDoc, 
+            onSnapshot, 
+            collection,
+            setLogLevel,
+            query,
+            getDocs,
+            writeBatch
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- 全域變數 ---
+        const BRANCHES = ['中正店', '巨蛋店', '中港店', '復興店', '南京店'];
+        // *** 新增主管職稱列表 ***
+        const MANAGER_TITLES = ['經理', '副理', '護理長'];
+
+        // 固定編制範本
+        const BRANCH_TEMPLATE = [
+            { title: '諮詢顧問' }, { title: '諮詢顧問' },
+            { title: '諮詢師' }, { title: '諮詢師' }, { title: '諮詢師' },
+            { title: '醫美師' }, { title: '醫美師' }, { title: '醫美師' }, { title: '醫美師' }, { title: '醫美師' }, { title: '醫美師' },
+            { title: '護理師' }, { title: '護理師' }, { title: '護理師' }
+        ]; // 共 14 個職位
+         // *** 範本職稱列表 ***
+        const TEMPLATE_TITLES = ['諮詢顧問', '諮詢師', '醫美師', '護理師'];
+
+        let branchStaff = []; // *** 改名 ***
+        let managers = []; // *** 新增 ***
+        let resignedEmployees = [];
+        let isDataLoaded = false; 
+        
+        let db;
+        let auth;
+        let userId;
+        
+        let branchStaffCollectionPath; // *** 改名 ***
+        let managersCollectionPath; // *** 新增 ***
+        let resignedCollectionPath;
+        
+        let employeesUnsubscribe = () => {};
+        let managersUnsubscribe = () => {}; // *** 新增 ***
+        let resignedUnsubscribe = () => {};
+
+        let editingEmployeeId = null;
+        let deletingEmployeeInfo = { id: null, type: null }; // *** 改為物件 ***
+        let isTransferMode = false; // *** 新增：調轉模式標記 ***
+
+        // --- DOM 元素 ---
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const addEmployeeBtn = document.getElementById('add-employee-btn');
+        const printBtn = document.getElementById('print-btn');
+        // *** 新增 Export 按鈕 ***
+        const exportBtn = document.getElementById('export-btn'); 
+        const modal = document.getElementById('employee-modal');
+        const modalTitle = document.getElementById('employee-modal-title');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const cancelBtn = document.getElementById('cancel-btn');
+        const employeeForm = document.getElementById('employee-form');
+        const tablesContainer = document.getElementById('employee-tables-container');
+        const emptyState = document.getElementById('empty-state');
+        const totalEmployeesEl = document.getElementById('total-employees');
+        const examsCompletedEl = document.getElementById('exams-completed');
+        const averageScoreEl = document.getElementById('average-score');
+        const passRateEl = document.getElementById('pass-rate');
+        const printDateSpan = document.getElementById('print-date-span');
+        const printSummaryTbody = document.getElementById('print-summary-tbody');
+        const dashboardContent = document.getElementById('dashboard-content');
+        const printView = document.getElementById('print-view');
+        const returnToDashboardBtn = document.getElementById('return-to-dashboard-btn');
+        // *** 主管表 ***
+        const managerTableContainer = document.getElementById('manager-table-container');
+        const managerStatsTbody = document.getElementById('manager-stats-tbody');
+        const managerEmptyState = document.getElementById('manager-empty-state');
+        // *** 離職表 ***
+        const resignationStatsTbody = document.getElementById('resignation-stats-tbody');
+        const resignationStatsCards = document.getElementById('resignation-stats-cards');
+        const resignationEmptyState = document.getElementById('resignation-empty-state');
+        // *** 離職 Modal ***
+        const deleteConfirmModal = document.getElementById('delete-confirm-modal');
+        const confirmResignBtn = document.getElementById('confirm-resign-btn'); // Renamed
+        const confirmTransferBtn = document.getElementById('confirm-transfer-btn'); // New
+        const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
+        // *** 清除離職 Modal ***
+        const clearResignedBtn = document.getElementById('clear-resigned-btn');
+        const clearResignedConfirmModal = document.getElementById('clear-resigned-confirm-modal');
+        const confirmClearResignedBtn = document.getElementById('confirm-clear-resigned-btn');
+        const cancelClearResignedBtn = document.getElementById('cancel-clear-resigned-btn');
+        // *** 動態率表 ***
+        const turnoverStatsTbody = document.getElementById('turnover-stats-tbody');
+        const turnoverEmptyState = document.getElementById('turnover-empty-state');
+        // const modalDeleteBtn = document.getElementById('modal-delete-btn'); // *** 移除 ***
+        // *** 列印用 Tbody ***
+        const printManagerTbody = document.getElementById('print-manager-tbody');
+        const printResignationTbody = document.getElementById('print-resignation-tbody');
+        const printTurnoverTbody = document.getElementById('print-turnover-tbody');
+         // *** 修正：補上列印用 empty state 的宣告 ***
+        const printResignationEmptyState = document.getElementById('print-resignation-empty-state'); 
+        const printTurnoverEmptyState = document.getElementById('print-turnover-empty-state'); 
+        // *** Modal 欄位 ***
+        const branchGroup = document.getElementById('branch-group');
+        const transferDateGroup = document.getElementById('transfer-date-group'); 
+        const examFieldsGroup = document.getElementById('exam-fields-group');
+
+
+        // --- 核心功能 ---
+        function setDataLoaded(loaded) {
+            isDataLoaded = loaded;
+            if (loaded) {
+                loadingOverlay.classList.add('hidden'); 
+                dashboardContent.classList.remove('opacity-0'); 
+                addEmployeeBtn.disabled = false; 
+                printBtn.disabled = false;
+                exportBtn.disabled = false; // *** 啟用 Export 按鈕 ***
+                 clearResignedBtn.disabled = resignedEmployees.length === 0;
+            } else {
+                 loadingOverlay.classList.remove('hidden');
+                 dashboardContent.classList.add('opacity-0');
+                 addEmployeeBtn.disabled = true;
+                 printBtn.disabled = true;
+                 exportBtn.disabled = true;
+                 clearResignedBtn.disabled = true;
+            }
+        }
+
+
+        function updateUI() {
+             if (!isDataLoaded) return; 
+            renderBranchTable(); // *** 改名 ***
+            renderManagerTable(); // *** 新增 ***
+            updateDashboardStats(); 
+            renderResignationStats(resignationStatsTbody, resignationStatsCards, resignationEmptyState); 
+            renderTurnoverStats(turnoverStatsTbody, turnoverEmptyState); 
+             clearResignedBtn.disabled = resignedEmployees.length === 0; 
+        }
+
+        // *** 更新：職稱排序優先級 ***
+        function getTitlePriority(title) {
+            if (!title) return 5; // 無職稱
+            if (title.includes('諮詢顧問')) return 1;
+            if (title.includes('諮詢師')) return 2;
+            if (title.includes('醫美師')) return 3;
+            if (title.includes('護理師') || title.includes('護士')) return 4;
+            return 5; // 其他所有職稱
+        }
+        
+        // *** 新增：主管表渲染 ***
+        function renderManagerTable() {
+            if (!managerStatsTbody) return; // 安全檢查
+            
+            if (managers.length === 0) {
+                 managerEmptyState.classList.remove('hidden');
+                 managerStatsTbody.innerHTML = '';
+                 managerStatsTbody.closest('table').classList.add('hidden');
+            } else {
+                 managerEmptyState.classList.add('hidden');
+                 managerStatsTbody.closest('table').classList.remove('hidden');
+                 managerStatsTbody.innerHTML = '';
+                 
+                 // 依照職稱 > 到職日排序
+                 const sortedManagers = [...managers].sort((a,b) => {
+                     const titleA = a.title || '';
+                     const titleB = b.title || '';
+                     if (titleA !== titleB) {
+                         return titleA.localeCompare(titleB, 'zh-Hant');
+                     }
+                     return new Date(a.hireDate) - new Date(b.hireDate);
+                 });
+                 
+                 sortedManagers.forEach(emp => {
+                     const row = document.createElement('tr');
+                     row.className = "hover:bg-slate-700/60 transition-colors";
+                     row.innerHTML = `
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-200">${emp.name}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">${emp.title}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">${emp.hireDate}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">${emp.transferDate || 'N/A'}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium space-x-2 no-print">
+                            <button class="edit-btn bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-300 text-slate-900 font-semibold py-1 px-2 rounded shadow-md hover:from-yellow-400 hover:via-amber-500 hover:to-yellow-400 transition text-xs" data-id="${emp.id}" data-type="manager">編輯</button>
+                            <button class="delete-btn text-red-500 hover:text-red-400 transition" data-id="${emp.id}" data-type="manager">離職</button>
+                        </td>
+                     `;
+                     managerStatsTbody.appendChild(row);
+                 });
+            }
+        }
+        
+
+        function renderBranchTable() { // *** 改名 ***
+            tablesContainer.innerHTML = '';
+            
+            if (branchStaff.length === 0) { // *** 改名 ***
+                 emptyState.classList.remove('hidden');
+                 tablesContainer.classList.add('hidden');
+            } else {
+                 emptyState.classList.add('hidden');
+                 tablesContainer.classList.remove('hidden');
+            }
+            
+            BRANCHES.forEach(branch => { 
+                const branchEmployees = branchStaff // *** 改名 ***
+                    .filter(emp => emp.branch === branch)
+                    .sort((a, b) => {
+                        const priorityA = getTitlePriority(a.title); 
+                        const priorityB = getTitlePriority(b.title);
+                        if (priorityA !== priorityB) {
+                            return priorityA - priorityB;
+                        }
+                        if (a.name === '' && b.name !== '') return 1;
+                        if (a.name !== '' && b.name === '') return -1;
+                        const dateA = a.hireDate ? new Date(a.hireDate) : new Date('9999-12-31');
+                        const dateB = b.hireDate ? new Date(b.hireDate) : new Date('9999-12-31');
+                        return dateA - dateB;
+                    });
+                    
+                const branchContainer = document.createElement('div');
+                
+                // 表頭 (僅電腦版)
+                const tableHeader = `
+                    <thead class="bg-slate-900/70">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">姓名</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">職稱</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">到職日期</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">筆試日期</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">筆試成績</th>
+                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">職能認證頒發</th>
+                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider no-print">操作</th>
+                        </tr>
+                    </thead>`;
+                
+                let tableRows = '';
+                let cardRows = ''; 
+                
+                const currentFilledCount = branchEmployees.filter(e => e.name !== '').length;
+                 
+                // 渲染員工 (無論是否為空)
+                branchEmployees.forEach(emp => { 
+                    const isPlaceholderRow = emp.name === ''; 
+
+                    // --- 通用顯示邏輯 ---
+                    let examDateDisplay = emp.examDate || '<span class="text-gray-500">未完成</span>';
+                    let scoreDisplay = emp.score !== '' && emp.score !== null && emp.score !== undefined ? `${emp.score} 分` : '<span class="text-gray-500">未完成</span>';
+                    let certifiedDisplay = `<input type="checkbox" ${emp.certified ? 'checked' : ''} disabled class="table-checkbox opacity-70">`;
+                    
+                    
+                    // --- 建立電腦版 Table Row ---
+                    if (isPlaceholderRow) {
+                         tableRows += `
+                            <tr class="placeholder-row hover:bg-slate-700/60 transition-colors">
+                                <td class="px-6 py-4 whitespace-nowrap text-sm">(空位)</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">${emp.title}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm">${examDateDisplay}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm">${scoreDisplay}</td>
+                                <td class="px-6 py-4 text-center">${certifiedDisplay}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium space-x-2 no-print">
+                                     <button class="edit-btn bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-300 text-slate-900 font-semibold py-1 px-2 rounded shadow-md hover:from-yellow-400 hover:via-amber-500 hover:to-yellow-400 transition text-xs" data-id="${emp.id}" data-type="branch">編輯</button>
+                                </td>
+                            </tr>`;
+                    } else {
+                         tableRows += `
+                            <tr class="hover:bg-slate-700/60 transition-colors">
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-200">${emp.name}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">${emp.title}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">${emp.hireDate}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">${examDateDisplay}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold ${emp.score >= 60 ? 'text-green-400' : (emp.score < 60 && emp.score !== '' && emp.score !== null && emp.score !== undefined ? 'text-red-400' : '')}">${scoreDisplay}</td>
+                                <td class="px-6 py-4 text-center">${certifiedDisplay}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium space-x-2 no-print">
+                                    <button class="edit-btn bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-300 text-slate-900 font-semibold py-1 px-2 rounded shadow-md hover:from-yellow-400 hover:via-amber-500 hover:to-yellow-400 transition text-xs" data-id="${emp.id}" data-type="branch">編輯</button>
+                                    <button class="delete-btn text-red-500 hover:text-red-400 transition" data-id="${emp.id}" data-type="branch">離職</button>
+                                </td>
+                            </tr>`;
+                    }
+                    
+                    // --- 建立手機版 Card Row ---
+                     cardRows += `<div class="bg-slate-700/60 rounded-lg p-4 shadow-lg ${isPlaceholderRow ? 'border-2 border-dashed border-slate-600' : ''}">`;
+                     cardRows += `
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h5 class="font-bold text-lg ${isPlaceholderRow ? 'text-gray-400' : 'text-white'}">${emp.name || '(空位)'}</h5>
+                                <p class="text-sm text-gray-300">${emp.title}</p>
+                            </div>
+                            <div class="flex flex-col items-end space-y-2 no-print">
+                                <button class="edit-btn bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-300 text-slate-900 font-semibold py-1 px-3 rounded-md shadow-md hover:from-yellow-400 hover:via-amber-500 hover:to-yellow-400 transition text-sm" data-id="${emp.id}" data-type="branch">編輯</button>
+                                ${!isPlaceholderRow ? `<button class="delete-btn text-red-500 hover:text-red-400 transition text-sm font-medium py-1 px-3 bg-slate-800 rounded-md" data-id="${emp.id}" data-type="branch">離職</button>` : ''}
+                            </div>
+                        </div>
+                     `;
+                     if (!isPlaceholderRow) {
+                         cardRows += `
+                             <dl class="mt-3 pt-3 border-t border-slate-600 mobile-card-grid text-sm">
+                                <dt>到職日:</dt><dd>${emp.hireDate}</dd>
+                                <dt>筆試日:</dt><dd>${examDateDisplay}</dd>
+                                <dt>成績:</dt><dd class="font-semibold ${emp.score >= 60 ? 'text-green-400' : (emp.score < 60 && emp.score !== '' && emp.score !== null && emp.score !== undefined ? 'text-red-400' : '')}">${scoreDisplay}</dd>
+                                <dt>認證:</dt><dd>${certifiedDisplay}</dd>
+                             </dl>
+                         `;
+                     }
+                     cardRows += `</div>`;
+
+                });
+
+                branchContainer.innerHTML = `
+                    <h4 class="text-md font-semibold text-gray-100 mb-4 border-b border-slate-700 pb-2">${branch} ( ${currentFilledCount} / 14 )</h4>
+                    <!-- 電腦版表格 -->
+                    <div class="overflow-x-auto hidden md:block">
+                        <table class="min-w-full divide-y divide-slate-700">
+                            ${tableHeader}
+                            <tbody class="bg-slate-800/50 divide-y divide-slate-700">${tableRows}</tbody>
+                        </table>
+                    </div>
+                    <!-- 手機版卡片 -->
+                    <div class="block md:hidden space-y-3">
+                        ${cardRows}
+                    </div>
+                    `;
+                
+                tablesContainer.appendChild(branchContainer);
+            });
+        }
+
+         // *** 抽出計算統計的獨立函式 ***
+        function calculateStats(employeeList) { // employeeList is branchStaff
+            const filledEmployees = employeeList.filter(e => e.name !== '');
+            const totalEmployees = filledEmployees.length; 
+
+            const completedExams = filledEmployees.filter(e => e.score !== '' && e.score !== null && e.score !== undefined);
+            const completedCount = completedExams.length;
+            
+            let avgScoreText = 'N/A';
+            let passRateText = 'N/A';
+
+            if (completedCount > 0) {
+                const totalScore = completedExams.reduce((sum, e) => sum + Number(e.score), 0);
+                const avgScore = (totalScore / completedCount).toFixed(1);
+                avgScoreText = avgScore;
+                const passedCount = completedExams.filter(e => e.score >= 60).length;
+                const passRate = ((passedCount / completedCount) * 100).toFixed(1);
+                passRateText = `${passRate}%`;
+            }
+            
+            return {
+                total: totalEmployees, 
+                completed: completedCount,
+                average: avgScoreText,
+                passRate: passRateText
+            };
+        }
+
+        function updateDashboardStats() {
+            const stats = calculateStats(branchStaff); // *** 使用 branchStaff ***
+            totalEmployeesEl.textContent = stats.total; 
+            examsCompletedEl.textContent = stats.completed;
+            averageScoreEl.textContent = stats.average;
+            passRateEl.textContent = stats.passRate;
+            document.querySelector('#total-employees').previousElementSibling.textContent = "分店總員工人數"; // *** 更新標題 ***
+        }
+        
+        function renderResignationStats(targetTbody = resignationStatsTbody, targetCards = resignationStatsCards, targetEmptyState = resignationEmptyState) {
+            // *** 修正：檢查 targetTbody 是否存在 ***
+            if (!targetTbody) {
+                 console.error("renderResignationStats: targetTbody is null");
+                 return; 
+            }
+            
+            if (resignedEmployees.length === 0) {
+                if (targetEmptyState) targetEmptyState.classList.remove('hidden'); // *** 檢查 null ***
+                targetTbody.innerHTML = ''; 
+                if (targetCards) targetCards.innerHTML = ''; 
+                targetTbody.closest('table').classList.add('hidden'); 
+                if (targetCards) targetCards.classList.add('hidden'); 
+                 if (clearResignedBtn) clearResignedBtn.disabled = true; 
+                return;
+            }
+
+            if (targetEmptyState) targetEmptyState.classList.add('hidden'); // *** 檢查 null ***
+            targetTbody.closest('table').classList.remove('hidden'); 
+            if (targetCards) targetCards.classList.remove('hidden'); 
+            targetTbody.innerHTML = '';
+            if (targetCards) targetCards.innerHTML = '';
+             if (clearResignedBtn) clearResignedBtn.disabled = false; 
+
+            const stats = {}; 
+            resignedEmployees.forEach(emp => {
+                if (!emp.resignationDate || isNaN(new Date(emp.resignationDate).getTime())) {
+                    console.warn("Invalid or missing resignation date for employee:", emp);
+                    return; 
+                }
+                const date = new Date(emp.resignationDate);
+                const year = date.getFullYear();
+                const month = date.getMonth() + 1; 
+                const key = `${year}-${String(month).padStart(2, '0')}`;
+                
+                if (!stats[key]) {
+                    stats[key] = { total: 0, manager: [] }; // *** 新增 manager 欄位 ***
+                    BRANCHES.forEach(b => stats[key][b] = []); 
+                }
+                
+                const branchKey = emp.branch && BRANCHES.includes(emp.branch) ? emp.branch : 'manager'; // *** 主管歸類為 'manager' ***
+                 if (!stats[key][branchKey]) {
+                    stats[key][branchKey] = []; 
+                }
+                stats[key][branchKey].push(emp.title || 'N/A'); 
+                stats[key].total += 1;
+            });
+
+            const sortedKeys = Object.keys(stats).sort().reverse(); 
+            let cardHtml = '';
+
+            sortedKeys.forEach(key => {
+                const [year, month] = key.split('-');
+                const data = stats[key];
+                const row = document.createElement('tr');
+                row.className = "hover:bg-slate-700/60 transition-colors";
+                
+                let branchCells = '';
+                let cardBranchHtml = '';
+
+                // *** 依序渲染分店 ***
+                BRANCHES.forEach(b => { 
+                    const titles = data[b] || []; 
+                    let titleHtml = '';
+                    if (titles.length > 0) {
+                        const titleCounts = titles.reduce((acc, title) => { 
+                            acc[title] = (acc[title] || 0) + 1; 
+                            return acc; 
+                        }, {});
+                        titleHtml = Object.entries(titleCounts)
+                            .map(([title, count]) => `${title} (${count})`)
+                            .join('<br>');
+                    }
+                    
+                    const cellClass = targetTbody === printResignationTbody ? 'p-2 border border-gray-300' : 'px-6 py-4 whitespace-nowrap text-sm text-left align-top text-gray-300';
+                    branchCells += `<td class="${cellClass}">${titleHtml || '0'}</td>`; 
+                    cardBranchHtml += `<dt>${b}:</dt><dd>${titleHtml || '0'}</dd>`;
+                });
+                
+                 // *** 單獨渲染主管 ***
+                const managerTitles = data['manager'] || [];
+                let managerTitleHtml = '';
+                if (managerTitles.length > 0) {
+                    const titleCounts = managerTitles.reduce((acc, title) => { 
+                        acc[title] = (acc[title] || 0) + 1; 
+                        return acc; 
+                    }, {});
+                    managerTitleHtml = Object.entries(titleCounts)
+                        .map(([title, count]) => `${title} (${count})`)
+                        .join('<br>');
+                }
+                const cellClass = targetTbody === printResignationTbody ? 'p-2 border border-gray-300' : 'px-6 py-4 whitespace-nowrap text-sm text-left align-top text-gray-300';
+                branchCells += `<td class="${cellClass}">${managerTitleHtml || '0'}</td>`;
+                cardBranchHtml += `<dt>主管:</dt><dd>${managerTitleHtml || '0'}</dd>`;
+
+
+                 if (targetTbody === printResignationTbody) {
+                     row.innerHTML = `
+                        <td class="p-2 border border-gray-300">${year}</td>
+                        <td class="p-2 border border-gray-300">${month} 月</td>
+                        ${branchCells}
+                        <td class="p-2 border border-gray-300 text-center">${data.total}</td>
+                    `;
+                 } else {
+                    row.innerHTML = `
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-100 align-top">${year}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-200 align-top">${month} 月</td>
+                        ${branchCells}
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-center font-semibold text-cyan-400 align-top">${data.total}</td>
+                    `;
+                 }
+                targetTbody.appendChild(row);
+                
+                if (targetCards) {
+                    cardHtml += `
+                        <div class="bg-slate-700/60 rounded-lg p-4">
+                            <h5 class="font-bold text-lg text-white">${year} 年 ${month} 月</h5>
+                            <p class="text-sm text-cyan-400 mb-2">當月總計: ${data.total}</p>
+                            <dl class="mt-3 pt-3 border-t border-slate-600 mobile-card-grid text-sm">
+                                ${cardBranchHtml}
+                            </dl>
+                        </div>
+                    `;
+                }
+            });
+            if (targetCards) targetCards.innerHTML = cardHtml; 
+        }
+
+        // *** 更新：計算到職/離職率 (僅計算分店員工) ***
+        function renderTurnoverStats(targetTbody = turnoverStatsTbody, targetEmptyState = turnoverEmptyState) {
+            if (!targetTbody) {
+                console.error("renderTurnoverStats: targetTbody is null");
+                return;
+            }
+            
+            if (targetEmptyState) targetEmptyState.classList.add('hidden');
+            if (targetTbody) targetTbody.innerHTML = '';
+            
+            // *** 只撈取分店員工 (branchStaff) 和 屬於分店的離職員工 ***
+             const allTimeBranchEmployees = [
+                 ...branchStaff, 
+                 ...resignedEmployees.filter(e => e.branch && BRANCHES.includes(e.branch))
+             ].filter(e => e.name !== ''); 
+
+            if (allTimeBranchEmployees.length === 0) {
+                if (targetEmptyState) targetEmptyState.classList.remove('hidden');
+                return;
+            }
+            
+            const today = new Date();
+            let statsHtml = '';
+
+            for (let i = 0; i < 6; i++) {
+                const targetMonth = new Date(today.getFullYear(), today.getMonth() - i, 1);
+                const monthStart = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 1);
+                const monthEnd = new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0); 
+                const prevMonthEnd = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 0); 
+                
+                const monthLabel = `${targetMonth.getFullYear()} 年 ${targetMonth.getMonth() + 1} 月`;
+
+                const separations = allTimeBranchEmployees.filter(e => 
+                    e.resignationDate && 
+                    new Date(e.resignationDate) >= monthStart && 
+                    new Date(e.resignationDate) <= monthEnd
+                ).length;
+                
+                const newHires = allTimeBranchEmployees.filter(e => 
+                    e.hireDate && 
+                    new Date(e.hireDate) >= monthStart && 
+                    new Date(e.hireDate) <= monthEnd
+                ).length;
+
+                const startHeadcount = allTimeBranchEmployees.filter(e => 
+                    e.hireDate && 
+                    new Date(e.hireDate) <= prevMonthEnd && 
+                    (!e.resignationDate || new Date(e.resignationDate) > prevMonthEnd)
+                ).length;
+                
+                const endHeadcount = allTimeBranchEmployees.filter(e => 
+                    e.hireDate && 
+                    new Date(e.hireDate) <= monthEnd && 
+                    (!e.resignationDate || new Date(e.resignationDate) > monthEnd)
+                ).length;
+
+                const averageHeadcount = (startHeadcount + endHeadcount) / 2;
+                
+                const hireRate = (averageHeadcount > 0) ? ((newHires / averageHeadcount) * 100).toFixed(1) + '%' : (startHeadcount === 0 && newHires > 0 ? 'N/A' : '0.0%');
+                const turnoverRate = (averageHeadcount > 0) ? ((separations / averageHeadcount) * 100).toFixed(1) + '%' : '0.0%';
+
+                // 根據不同的 tbody 產生不同 class
+                 if (targetTbody === printTurnoverTbody) {
+                     statsHtml += `
+                        <tr>
+                            <td class="p-2 border border-gray-300">${monthLabel}</td>
+                            <td class="p-2 border border-gray-300 text-center">${startHeadcount}</td>
+                            <td class="p-2 border border-gray-300 text-center">${newHires}</td>
+                            <td class="p-2 border border-gray-300 text-center">${separations}</td>
+                            <td class="p-2 border border-gray-300 text-center">${endHeadcount}</td>
+                            <td class="p-2 border border-gray-300 text-center">${averageHeadcount.toFixed(1)}</td>
+                            <td class="p-2 border border-gray-300 text-center">${hireRate}</td>
+                            <td class="p-2 border border-gray-300 text-center">${turnoverRate}</td>
+                        </tr>
+                    `;
+                 } else {
+                    statsHtml += `
+                        <tr class="hover:bg-slate-700/60 transition-colors">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-100">${monthLabel}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-300">${startHeadcount}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-green-400">${newHires}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-red-400">${separations}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-300">${endHeadcount}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-300">${averageHeadcount.toFixed(1)}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-center font-semibold text-green-400">${hireRate}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-center font-semibold text-red-400">${turnoverRate}</td>
+                        </tr>
+                    `;
+                 }
+            }
+            if (targetTbody) targetTbody.innerHTML = statsHtml;
+        }
+
+        // --- 事件監聽器 ---
+
+        const openModal = () => {
+             modal.classList.remove('hidden');
+         };
+         
+        const closeModal = () => {
+             modal.classList.add('hidden');
+             editingEmployeeId = null; 
+             isTransferMode = false; // *** 確保調轉模式被重置 ***
+             deletingEmployeeInfo = { id: null, type: null }; // *** 修正：在這裡重置 ***
+         };
+         
+         // *** 新增：開啟編輯 Modal 的共用函式 ***
+        function openEditModal(id, type = 'branch') {
+            const emp = (type === 'branch') ? branchStaff.find(e => e.id === id) : managers.find(e => e.id === id);
+            if (!emp) return;
+
+            editingEmployeeId = id; 
+
+            // 預填表單
+            modalTitle.textContent = isTransferMode ? '員工調轉' : '編輯資料';
+            employeeForm.reset(); // *** 先重置 ***
+            
+            document.getElementById('branch').value = emp.branch || ''; // 主管可能沒有
+            document.getElementById('name').value = emp.name;
+            document.getElementById('title').value = emp.title;
+            document.getElementById('hireDate').value = emp.hireDate;
+            document.getElementById('transferDate').value = emp.transferDate || ''; // 填入轉調日期
+            document.getElementById('examDate').value = emp.examDate || '';
+            document.getElementById('score').value = emp.score || '';
+            document.getElementById('certified').checked = emp.certified;
+            
+            const branchInput = document.getElementById('branch');
+            const titleInput = document.getElementById('title');
+
+            if (isTransferMode) {
+                branchInput.disabled = false; // 解鎖
+                titleInput.disabled = false; // 解鎖
+                transferDateGroup.classList.remove('hidden'); // 顯示轉調日期
+                document.getElementById('transferDate').value = new Date().toISOString().split('T')[0]; // 預設今天
+                // modalDeleteBtn.classList.add('hidden'); // 隱藏離職按鈕
+            } else {
+                // 編輯模式
+                branchInput.disabled = true; // 鎖定
+                titleInput.disabled = true; // 鎖定
+                transferDateGroup.classList.add('hidden'); // 隱藏轉調日期
+                // if (emp.name !== '') { 
+                //     modalDeleteBtn.classList.remove('hidden');
+                // } else {
+                //     modalDeleteBtn.classList.add('hidden');
+                // }
+            }
+            
+            // 根據職稱決定是否顯示考試欄位
+            const isManager = MANAGER_TITLES.includes(emp.title);
+            examFieldsGroup.classList.toggle('hidden', isManager); // 主管隱藏
+            branchGroup.classList.toggle('hidden', isManager && !isTransferMode); // 編輯主管時隱藏分店
+
+            openModal();
+        }
+         
+        addEmployeeBtn.addEventListener('click', () => { 
+             if (!isDataLoaded) return; 
+             
+             employeeForm.reset(); // *** reset 移到這裡 ***
+             isTransferMode = false; // *** 確保非調轉模式 ***
+             editingEmployeeId = null; // *** 確保清除 ID ***
+             modalTitle.textContent = '新增員工資料'; 
+             // modalDeleteBtn.classList.add('hidden'); 
+             transferDateGroup.classList.add('hidden'); 
+             
+             document.getElementById('branch').disabled = false;
+             document.getElementById('title').disabled = false; 
+             
+             // *** 新增：動態顯示/隱藏考試欄位 ***
+             const titleSelect = document.getElementById('title');
+             titleSelect.onchange = () => {
+                 const selectedTitle = titleSelect.value;
+                 const isManager = MANAGER_TITLES.includes(selectedTitle);
+                 examFieldsGroup.classList.toggle('hidden', isManager);
+                 branchGroup.classList.toggle('hidden', isManager);
+                 if (isManager) {
+                     document.getElementById('branch').value = ''; // 主管不需分店
+                 }
+             };
+             // *** 初始化欄位顯示 ***
+             examFieldsGroup.classList.remove('hidden');
+             branchGroup.classList.remove('hidden');
+            
+            openModal(); 
+        });
+        
+        // *** 新增：匯出 CSV 功能 ***
+        exportBtn.addEventListener('click', () => {
+            if (!isDataLoaded) return;
+            
+            // 1. 準備資料
+            const headers = ['類別', '分店', '姓名', '職稱', '到職日期', '轉調日期', '離職日期', '筆試日期', '筆試成績', '職能認證'];
+            const csvRows = [];
+            csvRows.push(headers.join(','));
+            
+            // 2. 加入分店員工
+            branchStaff.forEach(emp => {
+                 if (emp.name) {
+                     const row = [
+                         '分店員工',
+                         emp.branch,
+                         emp.name,
+                         emp.title,
+                         emp.hireDate,
+                         '', // 轉調
+                         '', // 離職
+                         emp.examDate || '',
+                         emp.score || '',
+                         emp.certified ? '是' : '否'
+                     ];
+                     csvRows.push(row.join(','));
+                 }
+            });
+            
+            // 3. 加入主管
+             managers.forEach(emp => {
+                 if (emp.name) {
+                     const row = [
+                         '主管',
+                         '', // 主管無分店
+                         emp.name,
+                         emp.title,
+                         emp.hireDate,
+                         emp.transferDate || '',
+                         '', // 離職
+                         '', // 考試
+                         '',
+                         ''
+                     ];
+                     csvRows.push(row.join(','));
+                 }
+            });
+            
+            // 4. 加入離職
+             resignedEmployees.forEach(emp => {
+                 const isManager = MANAGER_TITLES.includes(emp.title);
+                 const row = [
+                     '離職',
+                     emp.branch || (isManager ? '' : '其他'),
+                     emp.name,
+                     emp.title,
+                     emp.hireDate,
+                     '', 
+                     emp.resignationDate ? emp.resignationDate.split('T')[0] : '',
+                     emp.examDate || '',
+                     emp.score || '',
+                     emp.certified ? '是' : '否'
+                 ];
+                 csvRows.push(row.join(','));
+            });
+            
+            // 5. 下載
+            const csvString = '\uFEFF' + csvRows.join('\n'); // Add BOM for Excel Chinese support
+            const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `員工資料備份_${new Date().toISOString().split('T')[0]}.csv`;
+            link.click();
+        });
+        
+        printBtn.addEventListener('click', () => {
+            if (!isDataLoaded) return; 
+            
+            const currentStats = calculateStats(branchStaff); // *** 修正: 傳入 branchStaff ***
+
+            if (printDateSpan) {
+                printDateSpan.textContent = new Date().toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric' });
+            }
+
+            document.getElementById('print-total-employees').textContent = currentStats.total;
+            document.getElementById('print-exams-completed').textContent = currentStats.completed;
+            document.getElementById('print-average-score').textContent = currentStats.average;
+            document.getElementById('print-pass-rate').textContent = currentStats.passRate;
+            
+             // *** 6. 填充主管名單 ***
+             if (printManagerTbody) {
+                 printManagerTbody.innerHTML = '';
+                 const sortedManagers = [...managers].sort((a,b) => new Date(a.hireDate) - new Date(b.hireDate));
+                 sortedManagers.forEach(emp => {
+                     if (emp.name === '') return;
+                      const rowHTML = `
+                        <tr>
+                            <td class="p-2 border border-gray-300">${emp.name}</td>
+                            <td class="p-2 border border-gray-300">${emp.title}</td>
+                            <td class="p-2 border border-gray-300">${emp.hireDate}</td>
+                            <td class="p-2 border border-gray-300">${emp.transferDate || 'N/A'}</td>
+                        </tr>
+                    `;
+                    printManagerTbody.insertAdjacentHTML('beforeend', rowHTML);
+                 });
+             }
+            
+            if (printSummaryTbody) {
+                printSummaryTbody.innerHTML = '';
+                
+                 // 預覽總表排序邏輯：1. 分店順序 2. 到職日期
+                const sortedEmployees = [...branchStaff].sort((a, b) => { // *** 修正: 傳入 branchStaff ***
+                    const branchOrder = BRANCHES.indexOf(a.branch) - BRANCHES.indexOf(b.branch);
+                     if (branchOrder !== 0) return branchOrder;
+                    
+                    // *** 修正：空日期排最後 ***
+                    if (!a.hireDate && b.hireDate) return 1;
+                    if (a.hireDate && !b.hireDate) return -1;
+                    if (!a.hireDate && !b.hireDate) return 0;
+                    
+                    return new Date(a.hireDate) - new Date(b.hireDate);
+                });
+
+
+                sortedEmployees.forEach(emp => {
+                    if (emp.name === '') return; 
+                    
+                    let examDateDisplay = emp.examDate || '<span style="color: #888;">未安排</span>';
+                    let scoreDisplay = emp.score !== '' && emp.score !== null && emp.score !== undefined ? `${emp.score} 分` : '<span style="color: #888;">未完成</span>';
+                    let certifiedDisplay = emp.certified ? '<span style="color: #16a34a; font-weight: bold;">是</span>' : '否';
+
+
+                    const rowHTML = `
+                        <tr>
+                            <td class="p-2 border border-gray-300">${emp.branch}</td>
+                            <td class="p-2 border border-gray-300">${emp.name}</td>
+                            <td class="p-2 border border-gray-300">${emp.title}</td>
+                            <td class="p-2 border border-gray-300">${emp.hireDate}</td>
+                            <td class="p-2 border border-gray-300">${examDateDisplay}</td>
+                            <td class="p-2 border border-gray-300">${scoreDisplay}</td>
+                            <td class="p-2 border border-gray-300">${certifiedDisplay}</td>
+                        </tr>
+                    `;
+                    printSummaryTbody.insertAdjacentHTML('beforeend', rowHTML);
+                });
+            }
+            
+            // *** 4. 填充離職統計 ***
+            renderResignationStats(printResignationTbody, null, printResignationEmptyState); // *** 傳入 Tbody 和 EmptyState ***
+            
+            // *** 5. 填充動態率統計 ***
+            renderTurnoverStats(printTurnoverTbody, printTurnoverEmptyState); // *** 傳入 Tbody 和 EmptyState ***
+
+            
+            dashboardContent.classList.add('hidden');
+            printView.classList.remove('hidden');
+        });
+
+        returnToDashboardBtn.addEventListener('click', () => {
+            printView.classList.add('hidden');
+            dashboardContent.classList.remove('hidden');
+        });
+
+        closeModalBtn.addEventListener('click', closeModal);
+        cancelBtn.addEventListener('click', closeModal);
+        modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+
+        employeeForm.addEventListener('submit', async (e) => {
+             if (!isDataLoaded) return; 
+            e.preventDefault();
+            const formData = new FormData(employeeForm);
+            const employeeData = Object.fromEntries(formData.entries());
+             
+            const isManager = MANAGER_TITLES.includes(employeeData.title);
+            
+            if (isManager) {
+                employeeData.examDate = '';
+                employeeData.score = '';
+                employeeData.certified = false;
+                employeeData.branch = ''; // 主管沒有分店
+                 employeeData.transferDate = employeeData.transferDate || ''; // 保留轉調日期
+            } else {
+                employeeData.examDate = employeeData.examDate || '';
+                employeeData.score = employeeData.score || '';
+                employeeData.certified = formData.has('certified');
+                employeeData.transferDate = ''; // 分店員工沒有轉調日期
+            }
+            
+            
+            const submitButton = employeeForm.querySelector('button[type="submit"]');
+            submitButton.disabled = true;
+            submitButton.textContent = '儲存中...';
+
+            try {
+                 if (isTransferMode && editingEmployeeId) {
+                     // *** A. 員工調轉 ***
+                    const oldEmployeeId = editingEmployeeId;
+                    // *** 修正：從 deletingEmployeeInfo 取得正確的 type ***
+                    const oldEmployee = (deletingEmployeeInfo.type === 'branch') 
+                        ? branchStaff.find(e => e.id === oldEmployeeId)
+                        : managers.find(e => e.id === oldEmployeeId);
+                    
+                    const newBranch = employeeData.branch;
+                    const newTitle = employeeData.title;
+                    const transferDate = employeeData.transferDate || new Date().toISOString().split('T')[0];
+                    
+                    const newIsManager = MANAGER_TITLES.includes(newTitle);
+                    
+                    const batch = writeBatch(db);
+                    let transferSuccess = false;
+                    
+                    // 1. 準備新資料
+                    const newSlotData = { 
+                        ...oldEmployee, // 帶上舊的考試成績等
+                        name: employeeData.name,
+                        hireDate: employeeData.hireDate,
+                        examDate: newIsManager ? '' : employeeData.examDate,
+                        score: newIsManager ? '' : employeeData.score,
+                        certified: newIsManager ? false : employeeData.certified,
+                        branch: newIsManager ? '' : newBranch, 
+                        title: newTitle,
+                        transferDate: transferDate
+                    };
+                    delete newSlotData.id; 
+                    
+                    // 2. 決定新位置
+                    if (newIsManager) {
+                         // 2a. 調轉到主管
+                         // *** 修正：使用 batch.set 而非 addDoc ***
+                         const newManagerRef = doc(collection(db, managersCollectionPath));
+                         batch.set(newManagerRef, newSlotData);
+                         transferSuccess = true;
+                    } else {
+                         // 2b. 調轉到分店
+                         const placeholderToFill = branchStaff.find(emp => 
+                            emp.branch === newBranch &&
+                            emp.title === newTitle && 
+                            emp.name === ''
+                         );
+                         if (placeholderToFill) {
+                             batch.update(doc(db, branchStaffCollectionPath, placeholderToFill.id), newSlotData);
+                             transferSuccess = true;
+                         } else {
+                             alert(`"${newBranch}" 的 "${newTitle}" 職位已滿，無法調轉。`);
+                         }
+                    }
+                    
+                    // 3. 清空舊位置 (僅在找到新位置時)
+                    if (transferSuccess) {
+                        if (deletingEmployeeInfo.type === 'branch') {
+                            const oldSlotRef = doc(db, branchStaffCollectionPath, oldEmployeeId);
+                            batch.update(oldSlotRef, { name: '', hireDate: '', examDate: '', score: '', certified: false, transferDate: '' });
+                        } else {
+                             const oldSlotRef = doc(db, managersCollectionPath, oldEmployeeId);
+                             batch.delete(oldSlotRef);
+                        }
+                        await batch.commit();
+                    }
+
+                 } else if (editingEmployeeId) {
+                     // *** B. 編輯 (Update) ***
+                     const originalEmployee = branchStaff.find(e => e.id === editingEmployeeId) || managers.find(e => e.id === editingEmployeeId);
+                     const isManagerEdit = MANAGER_TITLES.includes(originalEmployee.title);
+
+                     const updatedData = {
+                         name: employeeData.name,
+                         hireDate: employeeData.hireDate,
+                         examDate: isManagerEdit ? '' : employeeData.examDate,
+                         score: isManagerEdit ? '' : employeeData.score,
+                         certified: isManagerEdit ? false : employeeData.certified,
+                         transferDate: isManagerEdit ? (employeeData.transferDate || originalEmployee.transferDate) : '' // *** 保留舊的轉調日期 ***
+                     };
+                     
+                     const collectionPath = isManagerEdit ? managersCollectionPath : branchStaffCollectionPath;
+                     const docRef = doc(db, collectionPath, editingEmployeeId);
+                     await updateDoc(docRef, updatedData);
+                     
+                 } else {
+                     // *** C. 新增 (Add New) ***
+                     if (isManager) {
+                         await addDoc(collection(db, managersCollectionPath), employeeData);
+                     } else {
+                         const targetBranch = employeeData.branch;
+                         const placeholderToFill = branchStaff.find(emp => 
+                            emp.branch === targetBranch &&
+                            emp.title === employeeData.title && 
+                            emp.name === ''
+                         );
+                        
+                        if (placeholderToFill) {
+                             const docRef = doc(db, branchStaffCollectionPath, placeholderToFill.id);
+                             await updateDoc(docRef, employeeData);
+                        } else {
+                             alert(`"${targetBranch}" 的 "${employeeData.title}" 職位已滿 (14人範本)，無法新增。`);
+                        }
+                     }
+                 }
+                closeModal();
+            } catch (err) {
+                console.error("Error adding/updating document: ", err);
+                alert("儲存資料失敗，請檢查網路連線或稍後再試。");
+            } finally {
+                submitButton.disabled = false;
+                submitButton.textContent = '儲存';
+                editingEmployeeId = null; // 確保重置
+                isTransferMode = false; // 確保重置
+            }
+        });
+
+        // *** 更新：聯合處理主管和分店員工的點擊 ***
+        document.getElementById('dashboard-content').addEventListener('click', async (e) => {
+             if (!isDataLoaded) return; 
+            
+            const target = e.target.closest('button'); 
+            if (!target) return; 
+
+            const id = target.dataset.id;
+            const type = target.dataset.type; // 'branch' or 'manager'
+            
+            if (!id || !type) return;
+
+            if (target.classList.contains('edit-btn')) {
+                 isTransferMode = false; 
+                 deletingEmployeeInfo = { id: id, type: type }; // *** 儲存資訊 ***
+                 openEditModal(id, type); 
+            } else if (target.classList.contains('delete-btn')) {
+                deletingEmployeeInfo = { id: id, type: type }; // *** 儲存類型和ID ***
+                deleteConfirmModal.classList.remove('hidden');
+            } 
+            
+        });
+        
+        // *** 移除 modalDeleteBtn.addEventListener ***
+        
+         // *** "確認離職" 按鈕 ***
+        confirmResignBtn.addEventListener('click', async () => {
+             if (!isDataLoaded) return; 
+            if (deletingEmployeeInfo.id !== null) {
+                 confirmResignBtn.disabled = true;
+                 confirmTransferBtn.disabled = true;
+                 cancelDeleteBtn.disabled = true;
+                 confirmResignBtn.textContent = '處理中...';
+                try {
+                    const id = deletingEmployeeInfo.id;
+                    const type = deletingEmployeeInfo.type;
+                    
+                    const employeeToResign = (type === 'branch') 
+                        ? branchStaff.find(e => e.id === id)
+                        : managers.find(e => e.id === id);
+                    
+                    if (employeeToResign) {
+                         if (employeeToResign.name !== '') {
+                            const resignedData = { ...employeeToResign };
+                            delete resignedData.id; 
+                            resignedData.resignationDate = new Date().toISOString();
+                             if (type === 'manager') { // *** 主管離職時，分店設為空 ***
+                                 resignedData.branch = '';
+                             }
+                            await addDoc(collection(db, resignedCollectionPath), resignedData);
+                         }
+                        
+                         // *** 根據類型決定清空或刪除 ***
+                         if (type === 'branch') {
+                            const docRef = doc(db, branchStaffCollectionPath, id);
+                            await updateDoc(docRef, {
+                                 name: '', hireDate: '', examDate: '', score: '', certified: false, transferDate: '' 
+                            });
+                         } else {
+                             const docRef = doc(db, managersCollectionPath, id);
+                             await deleteDoc(docRef);
+                         }
+                         
+                         if (editingEmployeeId === id) {
+                             editingEmployeeId = null;
+                         }
+                    }
+                    
+                    closeDeleteModal();
+                } catch (err) {
+                    console.error("Error resigning employee: ", err);
+                    alert("處理離職失敗，請稍後再試。");
+                } finally {
+                    confirmResignBtn.disabled = false;
+                    confirmTransferBtn.disabled = false;
+                    cancelDeleteBtn.disabled = false;
+                    confirmResignBtn.textContent = '確認離職';
+                }
+            }
+        });
+        
+        // *** "內部調轉" 按鈕 ***
+        confirmTransferBtn.addEventListener('click', async () => {
+            if (!isDataLoaded) return; 
+            if (deletingEmployeeInfo.id !== null) {
+                 isTransferMode = true; // *** 設定為調轉模式 ***
+                 editingEmployeeId = deletingEmployeeInfo.id; // *** 關鍵：設定
+                 const type = deletingEmployeeInfo.type;
+                 closeDeleteModal();
+                 openEditModal(editingEmployeeId, type); // *** 開啟編輯視窗 ***
+            }
+        });
+
+
+        const closeDeleteModal = () => {
+            deletingEmployeeInfo = { id: null, type: null }; // *** 重置物件 ***
+            deleteConfirmModal.classList.add('hidden');
+        };
+
+        cancelDeleteBtn.addEventListener('click', closeDeleteModal);
+        deleteConfirmModal.addEventListener('click', e => {
+            if (e.target === deleteConfirmModal) {
+                closeDeleteModal();
+            }
+        });
+
+        clearResignedBtn.addEventListener('click', () => {
+            if (!isDataLoaded || resignedEmployees.length === 0) return;
+            clearResignedConfirmModal.classList.remove('hidden');
+        });
+
+        cancelClearResignedBtn.addEventListener('click', () => {
+            clearResignedConfirmModal.classList.add('hidden');
+        });
+        clearResignedConfirmModal.addEventListener('click', e => {
+             if (e.target === clearResignedConfirmModal) {
+                clearResignedConfirmModal.classList.add('hidden');
+             }
+        });
+
+        confirmClearResignedBtn.addEventListener('click', async () => {
+            if (!isDataLoaded) return;
+
+            confirmClearResignedBtn.disabled = true;
+            cancelClearResignedBtn.disabled = true;
+            confirmClearResignedBtn.textContent = '清除中...';
+
+            try {
+                 const batch = writeBatch(db);
+                 resignedEmployees.forEach(emp => {
+                     const docRef = doc(db, resignedCollectionPath, emp.id);
+                     batch.delete(docRef);
+                 });
+                 await batch.commit();
+                 console.log("All resigned employee records cleared.");
+                clearResignedConfirmModal.classList.add('hidden');
+            } catch (err) {
+                console.error("Error clearing resigned employees: ", err);
+                alert("清除離職紀錄失敗，請稍後再試。");
+            } finally {
+                confirmClearResignedBtn.disabled = false;
+                cancelClearResignedBtn.disabled = false;
+                confirmClearResignedBtn.textContent = '全部清除';
+            }
+        });
+        
+        // --- Firebase 初始化 & 初始資料載入 ---
+         async function initializeFirebaseAndLoadInitialData() {
+            setDataLoaded(false); 
+            try {
+                const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+                if (!firebaseConfig.apiKey) {
+                    console.error("Firebase config is missing.");
+                     alert("無法載入資料庫設定，請重新整理頁面。");
+                    setDataLoaded(true); 
+                    return;
+                }
+
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                // setLogLevel('debug'); // 開發時使用
+
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        branchStaffCollectionPath = `/artifacts/${appId}/users/${userId}/branchStaff`; // *** 改名 ***
+                        managersCollectionPath = `/artifacts/${appId}/users/${userId}/managers`; // *** 新增 ***
+                        resignedCollectionPath = `/artifacts/${appId}/users/${userId}/resignedEmployees`;
+
+                        // 檢查 Firestore 是否已有資料
+                        const employeesQuery = query(collection(db, branchStaffCollectionPath));
+                        const employeesSnapshot = await getDocs(employeesQuery);
+                        
+                        // *** 檢查資料庫是否為空，或是否與範本数量不符 ***
+                        if (employeesSnapshot.empty || employeesSnapshot.size !== (BRANCHES.length * BRANCH_TEMPLATE.length)) {
+                            console.log("Firestore 'branchStaff' is empty or count mismatch, seeding with new template...");
+                            
+                            // *** 先刪除可能存在的舊資料 ***
+                            if (!employeesSnapshot.empty) {
+                                console.log("Deleting old data...");
+                                const deleteBatch = writeBatch(db);
+                                employeesSnapshot.docs.forEach(doc => {
+                                    deleteBatch.delete(doc.ref);
+                                });
+                                await deleteBatch.commit();
+                                console.log("Old data deleted.");
+                            }
+                            
+                             // *** 也清空主管表 ***
+                             const managerQuery = query(collection(db, managersCollectionPath));
+                             const managerSnapshot = await getDocs(managerQuery);
+                             if (!managerSnapshot.empty) {
+                                const deleteBatch = writeBatch(db);
+                                managerSnapshot.docs.forEach(doc => {
+                                    deleteBatch.delete(doc.ref);
+                                });
+                                await deleteBatch.commit();
+                                console.log("Old manager data deleted.");
+                             }
+
+
+                            // *** 建立新的 14x5 範本 ***
+                            const batch = writeBatch(db);
+                            for (const branch of BRANCHES) {
+                                for (const title of BRANCH_TEMPLATE.map(t => t.title)) {
+                                     const newDocRef = doc(collection(db, branchStaffCollectionPath)); 
+                                     const newEmp = {
+                                        branch: branch,
+                                        title: title,
+                                        name: '',
+                                        hireDate: '',
+                                        examDate: '',
+                                        score: '',
+                                        certified: false,
+                                        transferDate: '' 
+                                    };
+                                     batch.set(newDocRef, newEmp);
+                                }
+                            }
+                            await batch.commit(); 
+                            console.log("New template data seeded.");
+                        } else {
+                            console.log("Firestore 'branchStaff' already has data, skipping seed.");
+                        }
+
+
+                        // 停止舊的監聽
+                        employeesUnsubscribe();
+                        managersUnsubscribe(); // *** 新增 ***
+                        resignedUnsubscribe();
+                        
+                        let firstEmployeeLoad = true;
+                        let firstResignedLoad = true;
+                        let firstManagerLoad = true; // *** 新增 ***
+
+                        // 啟動即時監聽
+                        employeesUnsubscribe = onSnapshot(collection(db, branchStaffCollectionPath), (snapshot) => {
+                            branchStaff = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+                             
+                             if (firstEmployeeLoad) { 
+                                 firstEmployeeLoad = false;
+                                 if (!firstResignedLoad && !firstManagerLoad) setDataLoaded(true); 
+                             }
+                            updateUI();
+                        }, (error) => { 
+                            console.error("Error listening to branchStaff collection:", error);
+                            alert("讀取在職員工資料時發生錯誤，請稍後再試。");
+                            setDataLoaded(true); 
+                        });
+                        
+                        managersUnsubscribe = onSnapshot(collection(db, managersCollectionPath), (snapshot) => { // *** 新增 ***
+                            managers = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+                             
+                             if (firstManagerLoad) { 
+                                 firstManagerLoad = false;
+                                 if (!firstEmployeeLoad && !firstResignedLoad) setDataLoaded(true); 
+                             }
+                            updateUI();
+                        }, (error) => { 
+                            console.error("Error listening to managers collection:", error);
+                            alert("讀取主管資料時發生錯誤，請稍後再試。");
+                            setDataLoaded(true); 
+                        });
+                        
+                        resignedUnsubscribe = onSnapshot(collection(db, resignedCollectionPath), (snapshot) => {
+                            resignedEmployees = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+                             if (firstResignedLoad) { 
+                                 firstResignedLoad = false;
+                                 if (!firstEmployeeLoad && !firstManagerLoad) setDataLoaded(true); 
+                             }
+                            updateUI(); 
+                        }, (error) => { 
+                            console.error("Error listening to resigned employees collection:", error);
+                            alert("讀取離職員工資料時發生錯誤，請稍後再試。");
+                            setDataLoaded(true); 
+                        });
+                        
+                         if (employeesSnapshot.empty) {
+                             console.log("Waiting for seeded data snapshot...");
+                         } else {
+                             // *** 如果不是空的，也要檢查主管和離職 ***
+                             const resignedQuery = query(collection(db, resignedCollectionPath));
+                             await getDocs(resignedQuery);
+                             const managerQuery = query(collection(db, managersCollectionPath));
+                             await getDocs(managerQuery);
+
+                             if (firstEmployeeLoad && firstResignedLoad && firstManagerLoad) {
+                                 firstEmployeeLoad = false;
+                                 firstResignedLoad = false;
+                                 firstManagerLoad = false;
+                                 setDataLoaded(true);
+                             }
+                         }
+
+
+                    } else {
+                        const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                        if (token) {
+                            await signInWithCustomToken(auth, token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    }
+                });
+
+            } catch (err) {
+                console.error("Firebase initialization error:", err);
+                alert("儀表板初始化失敗：" + err.message);
+                setDataLoaded(true); 
+            }
+        }
+        
+         // --- 日期轉換 (民國 <-> 西元) ---
+        function convertRocDate(rocDate) {
+            if (!rocDate || typeof rocDate !== 'string') return '';
+            const parts = rocDate.split('/');
+            if (parts.length !== 3) return rocDate; 
+            try {
+                const year = parseInt(parts[0], 10) + 1911;
+                const month = parts[1].padStart(2, '0');
+                const day = parts[2].padStart(2, '0');
+                 const dateObj = new Date(year, month - 1, day);
+                 if (dateObj.getFullYear() === year && dateObj.getMonth() === month - 1 && dateObj.getDate() == day) {
+                     return `${year}-${month}-${day}`;
+                 } else {
+                     console.warn("Invalid ROC date found:", rocDate);
+                     return rocDate; 
+                 }
+            } catch (e) {
+                 console.error("Error converting ROC date:", rocDate, e);
+                 return rocDate; 
+            }
+        }
+
+
+        // 啟動應用程式
+        initializeFirebaseAndLoadInitialData();
+        
+    </script>
+</body>
+</html>
